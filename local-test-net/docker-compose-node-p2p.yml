@@ -1,0 +1,9 @@
+# Setup A — проброс P2P chain-node на хост (аналог deploy/join/docker-compose.node-p2p.yml).
+# Базовый docker-compose-base.yml публикует только RPC; без этого файла P2P доступен только внутри сети chain-public.
+#
+# Порядок: -f docker-compose-base.yml [-f docker-compose.genesis.yml | -f docker-compose.join.yml] -f docker-compose-node-p2p.yml
+
+services:
+  chain-node:
+    ports:
+      - "${P2P_PORT:-26656}:26656"

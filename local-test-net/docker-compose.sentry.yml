@@ -1,0 +1,65 @@
+# Setup B — sentry + validator (chain-node за релеем). Не использовать вместе с docker-compose-node-p2p.yml.
+# Setup A: docker-compose-base.yml + docker-compose.join.yml + docker-compose-node-p2p.yml
+#
+# Аналог deploy/join/docker-compose.sentry.yml (сервисы chain-node / api вместо node / api).
+# Подробности: gonka-investigation/SENTRY_VALIDATOR_STEPS.md
+#
+# Первый запуск (получить node id sentry):
+#   docker compose -p "$KEY_NAME" -f docker-compose-base.yml -f docker-compose.join.yml \
+#     -f docker-compose.sentry.yml up sentry -d
+#   docker exec "${KEY_NAME}-sentry" inferenced tendermint show-node-id
+#   export SENTRY_NODE_ID=<id>
+#   docker compose -p "$KEY_NAME" ... up -d
+#
+# Обязательно при полном стеке: SENTRY_NODE_ID
+# Порты на хосте (уникальны на join-ноду): SENTRY_HOST_P2P_PORT, SENTRY_HOST_RPC_PORT
+
+services:
+  sentry:
+    container_name: ${KEY_NAME}-sentry
+    image: ghcr.io/product-science/inferenced
+    command: ["sh", "./init-docker.sh"]
+    volumes:
+      - ./prod-local/${KEY_NAME}-sentry:/root/.inference-sentry
+    environment:
+      - STATE_DIR=/root/.inference-sentry
+      - KEY_NAME=${SENTRY_KEY_NAME:-${KEY_NAME}-sentry}
+      - REST_API_ACTIVE=true
+      - P2P_EXTERNAL_ADDRESS=${SENTRY_P2P_EXTERNAL_ADDRESS:-tcp://${KEY_NAME}-sentry:26656}
+      - SEED_NODE_RPC_URL=${SEED_NODE_RPC_URL}
+      - SEED_NODE_P2P_URL=${SEED_NODE_P2P_URL}
+      - RPC_SERVER_URL_1=${RPC_SERVER_URL_1}
+      - RPC_SERVER_URL_2=${RPC_SERVER_URL_2}
+      - SYNC_WITH_SNAPSHOTS=${SYNC_WITH_SNAPSHOTS}
+      - CONFIG_p2p__pex=true
+      - CONFIG_p2p__allow_duplicate_ip=true
+      - CONFIG_p2p__handshake_timeout=30s
+      - CONFIG_p2p__dial_timeout=30s
+      - IS_GENESIS=false
+      - IS_TEST_NET=true
+      - DEBUG=false
+      - SNAPSHOT_INTERVAL=100
+      - SNAPSHOT_KEEP_RECENT=5
+      - INIT_ONLY=false
+    ports:
+      - "${SENTRY_HOST_P2P_PORT:-26656}:26656"
+      - "${SENTRY_HOST_RPC_PORT:-26657}:26657"
+    networks:
+      - chain-public
+    restart: unless-stopped
+
+  chain-node:
+    environment:
+      - CONFIG_p2p__pex=false
+      - CONFIG_p2p__persistent_peers=${SENTRY_NODE_ID}@${KEY_NAME}-sentry:26656
+    depends_on:
+      sentry:
+        condition: service_started
+
+  api:
+    environment:
+      - DAPI_CHAIN_NODE__URL=http://${KEY_NAME}-sentry:26657
+      - DAPI_CHAIN_NODE__P2P_URL=tcp://${KEY_NAME}-sentry:26656
+    depends_on:
+      sentry:
+        condition: service_started

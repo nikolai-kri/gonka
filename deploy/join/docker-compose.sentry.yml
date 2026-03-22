@@ -1,0 +1,68 @@
+# Setup B only — sentry + validator (separate P2P relay + validator behind it).
+# Setup A (standard): docker-compose.yml + docker-compose.node-p2p.yml — do NOT include this file.
+#
+# Сервис `node` в базовом compose без проброса P2P на хост; при сетапе B публичный P2P только у sentry.
+#
+# Docs: gonka-investigation/SENTRY_VALIDATOR_STEPS.md
+#
+# Use: docker compose -f docker-compose.yml -f docker-compose.sentry.yml up -d
+#
+# First run: start sentry only, get its node id, set SENTRY_NODE_ID in config.env:
+#   docker compose -f docker-compose.yml -f docker-compose.sentry.yml up sentry -d
+#   docker exec sentry inferenced tendermint show-node-id
+#   # Add SENTRY_NODE_ID=<id> to config.env, then:
+#   docker compose -f docker-compose.yml -f docker-compose.sentry.yml up -d
+#
+# Required in config.env when using this override:
+#   SENTRY_NODE_ID       - node id of sentry (from: inferenced tendermint show-node-id)
+#   SENTRY_P2P_EXTERNAL_ADDRESS - optional; public address for sentry P2P (e.g. tcp://host:5001)
+
+services:
+  sentry:
+    image: ghcr.io/product-science/inferenced:0.2.10-post4
+    container_name: sentry
+    command: ["sh", "./init-docker.sh"]
+    volumes:
+      - .inference-sentry:/root/.inference-sentry
+      - ../../genesis/genesis.json:/root/genesis.json
+    environment:
+      - STATE_DIR=/root/.inference-sentry
+      - KEY_NAME=${KEY_NAME:-sentry}
+      - SEED_NODE_RPC_URL=${SEED_NODE_RPC_URL}
+      - SEED_NODE_P2P_URL=${SEED_NODE_P2P_URL}
+      - P2P_EXTERNAL_ADDRESS=${SENTRY_P2P_EXTERNAL_ADDRESS:-${P2P_EXTERNAL_ADDRESS}}
+      - CONFIG_p2p__pex=true
+      - CONFIG_p2p__allow_duplicate_ip=true
+      - CONFIG_p2p__handshake_timeout=30s
+      - CONFIG_p2p__dial_timeout=30s
+      - SYNC_WITH_SNAPSHOTS=${SYNC_WITH_SNAPSHOTS:-true}
+      - RPC_SERVER_URL_1=${RPC_SERVER_URL_1}
+      - RPC_SERVER_URL_2=${RPC_SERVER_URL_2}
+      - REST_API_ACTIVE=true
+      - INIT_ONLY=false
+      - IS_GENESIS=false
+      - GENESIS_SEEDS=${GENESIS_SEEDS}
+      - SNAPSHOT_INTERVAL=${SNAPSHOT_INTERVAL:-1000}
+      - SNAPSHOT_KEEP_RECENT=${SNAPSHOT_KEEP_RECENT:-5}
+      - TRUSTED_BLOCK_PERIOD=${TRUSTED_BLOCK_PERIOD:-2000}
+    ports:
+      - "${SENTRY_P2P_PORT:-5001}:26656"
+      - "127.0.0.1:26657:26657"
+    restart: always
+
+  node:
+    environment:
+      - CONFIG_p2p__pex=false
+      - CONFIG_p2p__persistent_peers=${SENTRY_NODE_ID}@sentry:26656
+    depends_on:
+      tmkms:
+        condition: service_started
+      sentry:
+        condition: service_started
+
+  api:
+    environment:
+      - DAPI_CHAIN_NODE__URL=http://sentry:26657
+      - DAPI_CHAIN_NODE__P2P_URL=tcp://sentry:26656
+    depends_on:
+      - sentry

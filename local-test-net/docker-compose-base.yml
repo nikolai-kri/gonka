@@ -14,8 +14,7 @@ services:
       - DEBUG=false
       - IS_TEST_NET=true
     ports:
-      - "${RPC_PORT:-26657}:26657"  # RPC
-      - "${P2P_PORT:-26656}:26656"  # P2P
+      - "${RPC_PORT:-26657}:26657"  # RPC (P2P на хост — только с docker-compose-node-p2p.yml, Setup A)
     networks:
       - chain-public
 

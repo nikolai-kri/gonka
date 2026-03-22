@@ -41,6 +41,16 @@ if [ -z "$P2P_EXTERNAL_ADDRESS" ]; then
   exit 1
 fi
 
+# Setup B (sentry): требуется node id после первого запуска только sentry — см. docker-compose.sentry.yml и README.
+if [ "${USE_SENTRY}" = "true" ] && [ -z "${SENTRY_NODE_ID}" ]; then
+  echo "ERROR: USE_SENTRY=true but SENTRY_NODE_ID is empty."
+  echo "Bootstrap:"
+  echo "  docker compose -p \"$KEY_NAME\" -f docker-compose-base.yml -f docker-compose.join.yml -f docker-compose.sentry.yml up sentry -d"
+  echo "  export SENTRY_NODE_ID=\$(docker exec \"${KEY_NAME}-sentry\" inferenced tendermint show-node-id)"
+  echo "Then re-run this script. To reset sentry state: rm -rf \"prod-local/${KEY_NAME}-sentry\""
+  exit 1
+fi
+
 project_name="$KEY_NAME"
 
 docker compose -p "$project_name" down -v
@@ -61,7 +71,14 @@ fi
 
 
 # Build compose command with conditional services support
+# Setup A: + docker-compose-node-p2p.yml | Setup B: USE_SENTRY=true → docker-compose.sentry.yml (без node-p2p)
 COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.join.yml"
+if [ "${USE_SENTRY}" = "true" ]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.sentry.yml"
+  echo "Using sentry overlay (Setup B); P2P на хост только у sentry (SENTRY_HOST_P2P_PORT / SENTRY_HOST_RPC_PORT)"
+else
+  COMPOSE_FILES="$COMPOSE_FILES -f docker-compose-node-p2p.yml"
+fi
 if [ "${PROXY_ACTIVE}" = "true" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.proxy.yml"
   echo "Starting with proxy support"

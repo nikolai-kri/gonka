@@ -1,0 +1,14 @@
+# Setup A — публичный P2P для сервиса `node` (стандарт: валидатор сам в сети).
+# Базовый docker-compose.yml не пробрасывает P2P на хост — подключите этот файл.
+#
+# Не смешивать с docker-compose.sentry.yml: при сетапе B P2P наружу только у sentry.
+#
+# Пример:
+#   docker compose -f docker-compose.yml -f docker-compose.node-p2p.yml up -d
+#
+# Порт на хосте: NODE_P2P_PORT (по умолчанию 5000).
+
+services:
+  node:
+    ports:
+      - "${NODE_P2P_PORT:-5000}:26656"

@@ -36,6 +36,7 @@ echo "Starting genesis node with explorer and proxy (port ${PROXY_PORT})"
 docker compose -p genesis \
   -f docker-compose-base.yml \
   -f docker-compose.genesis.yml \
+  -f docker-compose-node-p2p.yml \
   -f docker-compose.explorer.yml \
   -f docker-compose.proxy.yml \
   -f docker-compose.bridge.yml \

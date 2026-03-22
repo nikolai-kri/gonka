@@ -16,6 +16,8 @@ inference-chain/build/
 inference-chain/dist/
 /decentralized-api/decentralized-api
 chain-venv/
+.dapi/
+.tmkms/
 .inference/
 prod-genesis/
 prod-local/

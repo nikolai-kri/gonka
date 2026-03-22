@@ -6,7 +6,10 @@ This directory contains a modular Docker Compose setup that allows you to mix an
 
 ```
 local-test-net/
-├── docker-compose-base.yml           # Core services (chain-node, api, mock-server)
+├── docker-compose-base.yml           # Core: chain-node (RPC на хост), api, mock-server; P2P только внутри chain-public
+├── docker-compose-node-p2p.yml       # Setup A: P2P chain-node на хост (${P2P_PORT})
+├── docker-compose.sentry.yml         # Setup B: sentry + chain-node + api; не вместе с node-p2p
+├── bootstrap_join_sentry.sh          # Поднять только sentry (получить SENTRY_NODE_ID)
 ├── docker-compose.genesis.yml        # Genesis node specific settings
 ├── docker-compose.join.yml           # Join network specific settings  
 ├── docker-compose.explorer.yml       # Adds blockchain explorer
@@ -15,32 +18,73 @@ local-test-net/
 ├── docker-compose.tmkms.yml          # Adds TMKMS security layer
 ├── docker-compose.dns.yml            # Adds DNS server for wildcard ML-node hosts
 ├── docker-compose.dns-overrides.yml  # Configures services to use test DNS
-├── dns/
-│   └── Corefile                      # CoreDNS configuration
-└── Makefile                          # Easy commands for common combinations
+└── dns/
+    └── Corefile                      # CoreDNS configuration
 ```
+
+## P2P: Setup A vs Setup B (как в `deploy/join`)
+
+См. также **`gonka-investigation/SENTRY_VALIDATOR_STEPS.md`**.
+
+### Setup A — стандартный (P2P валидатора на хост)
+
+Базовый compose **не** публикует P2P `chain-node` на хост. Добавьте **`docker-compose-node-p2p.yml`** после base (+ genesis или join):
+
+```bash
+docker compose -p genesis -f docker-compose-base.yml -f docker-compose.genesis.yml -f docker-compose-node-p2p.yml up -d
+docker compose -p join1  -f docker-compose-base.yml -f docker-compose.join.yml  -f docker-compose-node-p2p.yml up -d
+```
+
+Скрипты `launch.sh`, `launch_full.sh`, `launch_genesis_only.sh` и **`launch_add_network_node.sh`** (по умолчанию) уже подключают `docker-compose-node-p2p.yml`.
+
+### Setup B — sentry + validator за релеем
+
+1. Задайте переменные join (в т.ч. `SEED_*`, `KEY_NAME`, порты). Уникальные порты sentry: **`SENTRY_HOST_P2P_PORT`**, **`SENTRY_HOST_RPC_PORT`**.
+2. Поднимите только sentry и получите id:
+   ```bash
+   ./bootstrap_join_sentry.sh   # или вручную: compose ... -f docker-compose.sentry.yml up sentry -d
+   export SENTRY_NODE_ID=$(docker exec "${KEY_NAME}-sentry" inferenced tendermint show-node-id)
+   ```
+3. Укажите **`P2P_EXTERNAL_ADDRESS`** на sentry, например `tcp://${KEY_NAME}-sentry:26656`.
+4. Запуск полного join-стека:
+   ```bash
+   export USE_SENTRY=true
+   ./launch_add_network_node.sh
+   ```
+
+**Не** подключайте `docker-compose-node-p2p.yml` вместе с `docker-compose.sentry.yml`. Каталог данных sentry: `prod-local/${KEY_NAME}-sentry` (при сбросе удалите вручную).
+
+**TMKMS + sentry:** в `docker-compose.sentry.yml` у `chain-node` задан `depends_on: sentry`. Если добавить `docker-compose.tmkms.yml`, объединение `depends_on` в Compose может перезаписать список — при необходимости сделайте свой объединяющий override.
+
+---
 
 ## Manual Usage
 
-If you prefer to use `docker-compose` directly:
+If you prefer to use `docker compose` directly:
 
 ```bash
-# Basic genesis
-docker-compose -f docker-compose-base.yml -f docker-compose.genesis.yml up
+# Basic genesis (with host P2P)
+docker compose -f docker-compose-base.yml -f docker-compose.genesis.yml -f docker-compose-node-p2p.yml up
 
 # Join network with explorer
-docker-compose -f docker-compose-base.yml -f docker-compose.join.yml -f docker-compose.explorer.yml up
+docker compose -f docker-compose-base.yml -f docker-compose.join.yml -f docker-compose-node-p2p.yml -f docker-compose.explorer.yml up
 
 # Any combination you want
-docker-compose -f docker-compose-base.yml -f docker-compose.genesis.yml -f docker-compose.explorer.yml -f docker-compose.proxy.yml -f docker-compose.bridge.yml up
+docker compose -f docker-compose-base.yml -f docker-compose.genesis.yml -f docker-compose-node-p2p.yml -f docker-compose.explorer.yml -f docker-compose.proxy.yml -f docker-compose.bridge.yml up
 ```
 
 ## Components
 
 ### Base (`docker-compose-base.yml`)
-- **chain-node**: Blockchain node
+- **chain-node**: Blockchain node (host **RPC** only; add **`docker-compose-node-p2p.yml`** for host P2P)
 - **api**: Decentralized API server  
 - **mock-server**: Testing mock server
+
+### Host P2P (`docker-compose-node-p2p.yml`)
+- Publishes **`${P2P_PORT}:26656`** for **chain-node** (Setup A).
+
+### Sentry relay (`docker-compose.sentry.yml`)
+- **Setup B**: **sentry** + **chain-node** (`pex=false`, `persistent_peers` → sentry) + **api** RPC to sentry. Requires **`SENTRY_NODE_ID`** after bootstrap.
 
 ### Genesis Mode (`docker-compose.genesis.yml`)
 - Sets `IS_GENESIS=true`
@@ -114,6 +158,7 @@ join4.test:53 {
 docker compose \
   -f docker-compose-base.yml \
   -f docker-compose.genesis.yml \
+  -f docker-compose-node-p2p.yml \
   -f docker-compose.dns.yml \
   -f docker-compose.dns-overrides.yml \
   up -d
@@ -144,6 +189,13 @@ PROXY_HTTPS_PORT=443  # HTTPS proxy port
 # For joining networks
 SEED_NODE_RPC_URL=http://seed-node:26657
 SEED_NODE_P2P_URL=seed-node:26656
+
+# Setup B (sentry) — launch_add_network_node.sh
+USE_SENTRY=true                    # use docker-compose.sentry.yml instead of node-p2p
+SENTRY_NODE_ID=                    # required after bootstrap (inferenced tendermint show-node-id)
+SENTRY_HOST_P2P_PORT=8211          # unique per join stack on host
+SENTRY_HOST_RPC_PORT=8311          # unique per join stack on host
+SENTRY_P2P_EXTERNAL_ADDRESS=       # optional, public P2P address for sentry
 
 # Optional
 REST_API_ACTIVE=true  # Enable/disable REST API server
