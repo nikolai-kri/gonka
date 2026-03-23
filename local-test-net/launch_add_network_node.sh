@@ -45,7 +45,7 @@ fi
 if [ "${USE_SENTRY}" = "true" ] && [ -z "${SENTRY_NODE_ID}" ]; then
   echo "ERROR: USE_SENTRY=true but SENTRY_NODE_ID is empty."
   echo "Bootstrap:"
-  echo "  docker compose -p \"$KEY_NAME\" -f docker-compose-base.yml -f docker-compose.join.yml -f docker-compose.sentry.yml up sentry -d"
+  echo "  docker compose -p \"$KEY_NAME\" -f docker-compose-base.yml -f docker-compose.chain-public-external.yml -f docker-compose.join.yml -f docker-compose.sentry.yml up sentry -d"
   echo "  export SENTRY_NODE_ID=\$(docker exec \"${KEY_NAME}-sentry\" inferenced tendermint show-node-id)"
   echo "Then re-run this script. To reset sentry state: rm -rf \"prod-local/${KEY_NAME}-sentry\""
   exit 1
@@ -53,26 +53,9 @@ fi
 
 project_name="$KEY_NAME"
 
-docker compose -p "$project_name" down -v
-docker run --rm -v "$(pwd):/workdir" -w /workdir alpine:3.19 rm -rf "prod-local/$project_name" 2>/dev/null || true
-
-echo "project_name=$project_name"
-
-# Set up wiremock
-mkdir -p "./prod-local/wiremock/$KEY_NAME/mappings/"
-mkdir -p "./prod-local/wiremock/$KEY_NAME/__files/"
-cp ../testermint/src/main/resources/mappings/*.json "./prod-local/wiremock/$KEY_NAME/mappings/"
-sed "s/{{KEY_NAME}}/$KEY_NAME/g" ../testermint/src/main/resources/alternative-mappings/validate_poc_batch.template.json > "./prod-local/wiremock/$KEY_NAME/mappings/validate_poc_batch.json"
-
-# If there's anything in the public-html/ dir, copy it!
-if [ -n "$(ls -A ./public-html 2>/dev/null)" ]; then
-  cp -r ../public-html/* "./prod-local/wiremock/$KEY_NAME/__files/"
-fi
-
-
-# Build compose command with conditional services support
 # Setup A: + docker-compose-node-p2p.yml | Setup B: USE_SENTRY=true → docker-compose.sentry.yml (без node-p2p)
-COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.join.yml"
+# chain-public-external: join-стек подключается к сети, созданной genesis (см. README).
+COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.chain-public-external.yml -f docker-compose.join.yml"
 if [ "${USE_SENTRY}" = "true" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.sentry.yml"
   echo "Using sentry overlay (Setup B); P2P на хост только у sentry (SENTRY_HOST_P2P_PORT / SENTRY_HOST_RPC_PORT)"
@@ -86,6 +69,22 @@ fi
 if [ "${BRIDGE_ACTIVE}" = "true" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.bridge.yml"
   echo "Starting with bridge support"
+fi
+
+docker compose -p "$project_name" $COMPOSE_FILES down -v
+docker run --rm -v "$(pwd):/workdir" -w /workdir alpine:3.19 rm -rf "prod-local/$project_name" 2>/dev/null || true
+
+echo "project_name=$project_name"
+
+# Set up wiremock
+mkdir -p "./prod-local/wiremock/$KEY_NAME/mappings/"
+mkdir -p "./prod-local/wiremock/$KEY_NAME/__files/"
+cp ../testermint/src/main/resources/mappings/*.json "./prod-local/wiremock/$KEY_NAME/mappings/"
+sed "s/{{KEY_NAME}}/$KEY_NAME/g" ../testermint/src/main/resources/alternative-mappings/validate_poc_batch.template.json > "./prod-local/wiremock/$KEY_NAME/mappings/validate_poc_batch.json"
+
+# If there's anything in the public-html/ dir, copy it!
+if [ -n "$(ls -A ./public-html 2>/dev/null)" ]; then
+  cp -r ../public-html/* "./prod-local/wiremock/$KEY_NAME/__files/"
 fi
 
 docker compose -p "$project_name" $COMPOSE_FILES up -d

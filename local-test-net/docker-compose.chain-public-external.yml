@@ -1,0 +1,6 @@
+# Подключение к существующей сети chain-public (после запуска genesis).
+# Используйте вместе с docker-compose-base.yml для join-стеков: -f docker-compose-base.yml -f docker-compose.chain-public-external.yml ...
+networks:
+  chain-public:
+    external: true
+    name: chain-public

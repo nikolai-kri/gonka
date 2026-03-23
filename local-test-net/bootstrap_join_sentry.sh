@@ -22,7 +22,7 @@ if [ -z "${KEY_NAME:-}" ]; then
   exit 1
 fi
 
-COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.join.yml -f docker-compose.sentry.yml"
+COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.chain-public-external.yml -f docker-compose.join.yml -f docker-compose.sentry.yml"
 if [ "${PROXY_ACTIVE:-}" = "true" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.proxy.yml"
 fi

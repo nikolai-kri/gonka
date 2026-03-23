@@ -17,12 +17,13 @@
 services:
   sentry:
     container_name: ${KEY_NAME}-sentry
-    image: ghcr.io/product-science/inferenced
+    image: ghcr.io/product-science/inferenced:0.2.10-post4
     command: ["sh", "./init-docker.sh"]
+    # Дефолтный home inferenced — /root/.inference (см. init-docker в образе). Иначе init пишет не в STATE_DIR.
     volumes:
-      - ./prod-local/${KEY_NAME}-sentry:/root/.inference-sentry
+      - ./prod-local/${KEY_NAME}-sentry:/root/.inference
     environment:
-      - STATE_DIR=/root/.inference-sentry
+      - STATE_DIR=/root/.inference
       - KEY_NAME=${SENTRY_KEY_NAME:-${KEY_NAME}-sentry}
       - REST_API_ACTIVE=true
       - P2P_EXTERNAL_ADDRESS=${SENTRY_P2P_EXTERNAL_ADDRESS:-tcp://${KEY_NAME}-sentry:26656}

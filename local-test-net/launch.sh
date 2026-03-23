@@ -6,6 +6,7 @@ export PUBLIC_SERVER_PORT=9000
 export ML_SERVER_PORT=9001
 export ADMIN_SERVER_PORT=9002
 export ML_GRPC_SERVER_PORT=9003
+export NATS_SERVER_PORT=9004
 export KEY_NAME=genesis
 export NODE_CONFIG="node_payload_mock_server_${KEY_NAME}.json"
 docker run --rm -v "$(pwd):/workdir" -w /workdir alpine:3.19 rm -rf prod-local 2>/dev/null || true
