@@ -1,0 +1,35 @@
+# Nginx load balancer между двумя сентри.
+# Использовать вместе с docker-compose.sentry.yml + docker-compose.sentry-2.yml
+#
+# API и chain-node обращаются к sentry-lb вместо конкретной сентри.
+# sentry-lb распределяет RPC-запросы между sentry и sentry-2 (least_conn).
+
+services:
+  sentry-lb:
+    container_name: ${KEY_NAME}-sentry-lb
+    image: nginx:alpine
+    cpus: 2
+    volumes:
+      - ./nginx/sentry-lb.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - KEY_NAME=${KEY_NAME}
+    ports:
+      - "${SENTRY_LB_RPC_PORT:-18400}:26657"
+    depends_on:
+      sentry:
+        condition: service_started
+      sentry-2:
+        condition: service_started
+    networks:
+      - chain-public
+    restart: unless-stopped
+
+  # API идёт на балансировщик
+  api:
+    environment:
+      - DAPI_CHAIN_NODE__URL=http://${KEY_NAME}-sentry-lb:26657
+      - DAPI_CHAIN_NODE__P2P_URL=tcp://${KEY_NAME}-sentry:26656
+    depends_on:
+      sentry-lb:
+        condition: service_started
+

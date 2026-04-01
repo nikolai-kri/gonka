@@ -1,0 +1,69 @@
+# Вторая sentry для того же join-стека (1 validator + 2 sentries).
+# Использовать ВМЕСТЕ с docker-compose.sentry.yml (не вместо).
+#
+# docker compose -p "$KEY_NAME" \
+#   -f docker-compose-base.yml -f docker-compose.chain-public-external.yml -f docker-compose.join.yml \
+#   -f docker-compose.sentry.yml -f docker-compose.sentry-2.yml up -d
+#
+# Первый запуск — обе сентри:
+#   1. Поднять sentry и sentry-2:
+#      docker compose -p "$KEY_NAME" ... -f docker-compose.sentry.yml -f docker-compose.sentry-2.yml up sentry sentry-2 -d
+#   2. Получить node id обеих:
+#      export SENTRY_NODE_ID=$(docker exec "${KEY_NAME}-sentry" inferenced tendermint show-node-id)
+#      export SENTRY2_NODE_ID=$(docker exec "${KEY_NAME}-sentry-2" inferenced tendermint show-node-id)
+#   3. Поднять полный стек:
+#      docker compose -p "$KEY_NAME" ... up -d
+#
+# Обязательные переменные:
+#   SENTRY_NODE_ID         — node id первой сентри
+#   SENTRY2_NODE_ID        — node id второй сентри
+#   SENTRY2_HOST_P2P_PORT  — P2P порт второй сентри на хосте (уникальный)
+#   SENTRY2_HOST_RPC_PORT  — RPC порт второй сентри на хосте (уникальный)
+
+services:
+  sentry-2:
+    container_name: ${KEY_NAME}-sentry-2
+    image: ghcr.io/product-science/inferenced:0.2.10-post4
+    command: ["sh", "./init-docker.sh"]
+    cpus: 8
+    mem_limit: 8g
+    volumes:
+      - ./prod-local/${KEY_NAME}-sentry-2:/root/.inference
+    environment:
+      - STATE_DIR=/root/.inference
+      - KEY_NAME=${KEY_NAME}-sentry-2
+      - REST_API_ACTIVE=true
+      - P2P_EXTERNAL_ADDRESS=${SENTRY2_P2P_EXTERNAL_ADDRESS:-tcp://${KEY_NAME}-sentry-2:26656}
+      - SEED_NODE_RPC_URL=${SEED_NODE_RPC_URL}
+      - SEED_NODE_P2P_URL=${SEED_NODE_P2P_URL}
+      - RPC_SERVER_URL_1=${RPC_SERVER_URL_1}
+      - RPC_SERVER_URL_2=${RPC_SERVER_URL_2}
+      - SYNC_WITH_SNAPSHOTS=${SYNC_WITH_SNAPSHOTS}
+      - CONFIG_p2p__pex=true
+      - CONFIG_p2p__allow_duplicate_ip=true
+      - CONFIG_p2p__handshake_timeout=30s
+      - CONFIG_p2p__dial_timeout=30s
+      - IS_GENESIS=false
+      - IS_TEST_NET=true
+      - DEBUG=false
+      - SNAPSHOT_INTERVAL=100
+      - SNAPSHOT_KEEP_RECENT=5
+      - INIT_ONLY=false
+    ports:
+      - "${SENTRY2_HOST_P2P_PORT:-26658}:26656"
+      - "${SENTRY2_HOST_RPC_PORT:-26659}:26657"
+    networks:
+      - chain-public
+    restart: unless-stopped
+
+  # Переопределяем chain-node: persistent_peers на ОБЕ сентри
+  chain-node:
+    environment:
+      - CONFIG_p2p__pex=false
+      - CONFIG_p2p__persistent_peers=${SENTRY_NODE_ID}@${KEY_NAME}-sentry:26656,${SENTRY2_NODE_ID}@${KEY_NAME}-sentry-2:26656
+    depends_on:
+      sentry:
+        condition: service_started
+      sentry-2:
+        condition: service_started
+

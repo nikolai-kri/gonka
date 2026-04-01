@@ -1,6 +1,8 @@
 services:
   chain-node:
     container_name: ${KEY_NAME}-node
+    cpus: 2
+    mem_limit: 8g
     command: [ "sh", "./init-docker.sh" ]
     image: ghcr.io/product-science/inferenced:0.2.10-post4
     volumes:
