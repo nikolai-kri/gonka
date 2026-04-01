@@ -7,6 +7,7 @@ release/
 *.dot
 *.log
 *.ign
+*.env
 prod-sim/
 gcp-prod-sim/
 decentralized-api/build/
